@@ -1,0 +1,13 @@
+# @package _global_
+
+actor_rollout_ref:
+  actor:
+    ppo_mini_batch_size: 32
+    ppo_micro_batch_size_per_gpu: 8
+  rollout:
+    log_prob_micro_batch_size_per_gpu: 8
+  ref:
+    log_prob_micro_batch_size_per_gpu: 8    
+
+data:
+  train_batch_size: 64

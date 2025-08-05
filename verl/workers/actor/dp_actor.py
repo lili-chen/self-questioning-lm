@@ -325,7 +325,7 @@ class DataParallelPPOActor(BasePPOActor):
         multi_turn = data.meta_info.get("multi_turn", False)
 
         select_keys = ["responses", "input_ids", "attention_mask", "position_ids", "old_log_probs", "advantages"]
-        if multi_turn:
+        if multi_turn or "loss_mask" in data.batch.keys():
             select_keys.append("loss_mask")
         if self.config.use_kl_loss:
             select_keys.append("ref_log_prob")

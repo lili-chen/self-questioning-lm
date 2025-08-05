@@ -147,14 +147,14 @@ class TaskRunner:
 
         # Load the reward manager for training and validation.
         reward_fn = load_reward_manager(config, tokenizer, num_examine=0, **config.reward_model.get("reward_kwargs", {}))
-        val_reward_fn = load_reward_manager(config, tokenizer, num_examine=1, **config.reward_model.get("reward_kwargs", {}))
+        val_reward_fn = load_reward_manager(config, tokenizer, num_examine=1, **config.reward_model.get("reward_kwargs", {}), is_train=False)
         resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 
         from verl.utils.dataset.rl_dataset import collate_fn
 
         # Create training and validation datasets.
-        train_dataset = create_rl_dataset(config.data.train_files, config.data, tokenizer, processor)
-        val_dataset = create_rl_dataset(config.data.val_files, config.data, tokenizer, processor)
+        train_dataset = create_rl_dataset(config.data.train_files, config.data, tokenizer, processor, is_train=True)
+        val_dataset = create_rl_dataset(config.data.val_files, config.data, tokenizer, processor, is_train=False)
         train_sampler = create_rl_sampler(config.data, train_dataset)
 
         # Initialize the PPO trainer.
@@ -179,7 +179,7 @@ class TaskRunner:
         trainer.fit()
 
 
-def create_rl_dataset(data_paths, data_config, tokenizer, processor):
+def create_rl_dataset(data_paths, data_config, tokenizer, processor, is_train=True):
     """Create a dataset.
 
     Arguments:
@@ -198,13 +198,21 @@ def create_rl_dataset(data_paths, data_config, tokenizer, processor):
     # Check if a custom dataset class is specified in the data configuration
     # and if the path to the custom class is provided
     if "custom_cls" in data_config and data_config.custom_cls.get("path", None) is not None:
-        from verl.utils.import_utils import load_extern_type
-
         # Dynamically load the custom dataset class
         dataset_cls = load_extern_type(data_config.custom_cls.path, data_config.custom_cls.name)
         # Verify that the custom dataset class inherits from torch.utils.data.Dataset
         if not issubclass(dataset_cls, Dataset):
-            raise TypeError(f"The custom dataset class '{data_config.custom_cls.name}' from '{data_config.custom_cls.path}' must inherit from torch.utils.data.Dataset")
+            raise TypeError(
+                f"The custom dataset class '{data_config.custom_cls.name}' from "
+                f"'{data_config.custom_cls.path}' must inherit from torch.utils.data.Dataset"
+            )
+    elif "datagen" in data_config and data_config.datagen.get("path", None) is not None and is_train:
+        # If a data generation strategy is specified, use the DynamicGenDataset class
+        from verl.utils.dataset.dynamicgen_dataset import DynamicGenDataset
+
+        dataset_cls = DynamicGenDataset
+        print("Using DynamicGenDataset for data generation.")
+
     else:
         # Use the default RLHFDataset class if no custom class is specified
         dataset_cls = RLHFDataset

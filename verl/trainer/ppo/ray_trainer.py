@@ -61,6 +61,102 @@ from verl.utils.tracking import ValidationGenerationsLogger
 
 WorkerType = Type[Worker]
 
+import json
+import wandb
+
+import verl.utils.torch_functional as verl_F
+from verl.utils.model import compute_position_id_with_mask
+from verl.utils.reward_score.math import last_boxed_only_string, remove_boxed
+
+def extract_solution(solution_str):
+    return remove_boxed(last_boxed_only_string(solution_str))
+
+def extract_problem_description(response: str) -> list:
+    """
+    Extracts the problem description part and formats into the specified format.
+    """
+    # Everything before the first "Test Cases:" is problem description
+    parts = response.split("Test Cases:")
+    problem_description = parts[0].strip()
+    
+    # Build the JSON object
+    formatted_problem = [
+        {
+            "content": (
+                "\nWhen tackling complex reasoning tasks, you have access to the following actions. Use them as needed to progress through your thought process.\n\n"
+                "[ASSESS]\n\n[ADVANCE]\n\n[VERIFY]\n\n[SIMPLIFY]\n\n[SYNTHESIZE]\n\n[PIVOT]\n\n[OUTPUT]\n\n"
+                "You should strictly follow the format below:\n\n"
+                "[ACTION NAME]\n\n"
+                "# Your action step 1\n\n"
+                "# Your action step 2\n\n"
+                "# Your action step 3\n\n...\n\n"
+                "Next action: [NEXT ACTION NAME]\n\n"
+            ),
+            "role": "system"
+        },
+        {
+            "content": problem_description.strip() + (
+                "\n\nWrite Python code to solve the problem. Present the code in \n"
+                "```python\nYour code\n```\n"
+                "at the end."
+            ),
+            "role": "user"
+        }
+    ]
+    
+    return formatted_problem
+
+def extract_unit_tests(response: str) -> dict:
+    """
+    Extracts the unit tests and formats them into the ground_truth JSON.
+    Assumes test case inputs are separated by a single '|' character instead of a newline.
+    """
+    parts = response.split("Test Cases:")
+    if len(parts) < 2:
+        return 'error'
+    
+    test_cases_section = parts[1].strip()
+
+    inputs = []
+    raw_outputs = []
+
+    # Each line with ||| is a test case
+    for line in test_cases_section.splitlines():
+        if "|||" not in line:
+            continue
+        
+        input_part, output_part = line.split("|||", 1)
+        input_part = input_part.strip()
+        output_part = output_part.strip()
+
+        # # Split the input on the custom separator '|'
+        # if '|' in input_part:
+        #     parts = input_part.split('|', 1)
+        #     restored_input = parts[0].strip() + "\n" + parts[1].strip()
+        # else:
+        restored_input = input_part
+
+        inputs.append(restored_input)
+        raw_outputs.append(output_part)
+
+    outputs = raw_outputs
+
+    ground_truth = {
+        "ground_truth": json.dumps({
+            "inputs": inputs,
+            "outputs": outputs
+        }),
+        "style": "rule"
+    }
+
+    return ground_truth
+
+
+dummy_unit_tests = {
+    "ground_truth": '{"inputs": ["2\\n1\\n0 10\\n2\\n0 1 1 2", "2\\n1\\n0 10\\n2\\n1 1 1 2", "2\\n1\\n0 15\\n2\\n1 1 1 2", "2\\n1\\n0 15\\n4\\n1 1 1 4", "2\\n1\\n0 11\\n4\\n1 1 1 4", "2\\n1\\n1 11\\n4\\n0 0 1 4", "2\\n1\\n1 2\\n4\\n0 0 1 4", "2\\n1\\n0 15\\n2\\n2 1 1 2", "2\\n1\\n0 20\\n4\\n1 1 1 4", "2\\n1\\n0 10\\n4\\n1 1 1 4", "2\\n1\\n0 11\\n4\\n1 1 1 5", "2\\n1\\n1 0\\n4\\n0 1 1 4", "2\\n1\\n1 2\\n4\\n0 0 1 6", "2\\n1\\n0 10\\n4\\n1 1 1 0", "2\\n1\\n0 3\\n2\\n2 1 1 4", "2\\n1\\n0 20\\n4\\n1 2 1 4", "2\\n1\\n0 11\\n4\\n1 1 1 0", "2\\n1\\n0 3\\n2\\n2 1 2 4", "2\\n1\\n2 8\\n7\\n0 0 1 4", "2\\n1\\n1 2\\n8\\n0 0 2 6", "2\\n1\\n0 10\\n4\\n-1 1 1 8", "2\\n1\\n1 2\\n8\\n0 0 3 6", "2\\n1\\n0 10\\n4\\n-1 0 1 8", "2\\n1\\n2 3\\n5\\n0 0 1 4", "2\\n1\\n-1 4\\n2\\n2 2 2 4", "2\\n1\\n0 10\\n4\\n-1 0 1 2", "2\\n1\\n1 24\\n2\\n1 3 1 2", "2\\n1\\n-1 8\\n2\\n2 2 2 4", "2\\n1\\n1 24\\n2\\n1 1 1 2", "2\\n1\\n-1 9\\n2\\n2 2 2 4", "2\\n1\\n0 20\\n17\\n1 3 0 4", "2\\n1\\n0 1\\n4\\n0 0 1 2", "2\\n1\\n0 20\\n17\\n0 3 0 4", "2\\n1\\n-2 9\\n3\\n2 2 2 4", "2\\n1\\n-2 9\\n3\\n2 2 4 4", "2\\n1\\n-1 1\\n7\\n0 -1 0 2", "2\\n1\\n-1 1\\n7\\n-1 -1 0 2", "2\\n1\\n-1 2\\n7\\n-1 -1 0 2", "2\\n1\\n-1 2\\n7\\n0 -1 0 2", "2\\n1\\n-1 4\\n7\\n-1 -1 0 2", "2\\n1\\n-1 4\\n7\\n-1 -1 -1 2", "2\\n1\\n-1 4\\n7\\n-1 0 -1 1", "2\\n1\\n0 17\\n2\\n1 1 1 2", "2\\n1\\n0 15\\n3\\n1 1 1 4", "2\\n1\\n0 11\\n4\\n1 1 2 4", "2\\n1\\n0 11\\n1\\n0 1 1 4", "2\\n1\\n0 20\\n2\\n2 1 1 2", "2\\n1\\n0 15\\n2\\n2 2 1 4", "2\\n1\\n0 15\\n1\\n1 1 1 4", "2\\n1\\n0 3\\n2\\n2 1 1 1", "2\\n1\\n0 20\\n1\\n1 2 1 4", "2\\n1\\n0 10\\n4\\n0 2 1 4", "2\\n1\\n0 11\\n4\\n1 1 2 0", "2\\n1\\n1 1\\n8\\n0 0 1 6", "2\\n1\\n1 25\\n2\\n0 1 1 2", "2\\n1\\n0 4\\n6\\n1 2 1 4", "2\\n1\\n1 15\\n2\\n0 3 1 3", "2\\n1\\n-1 3\\n4\\n2 2 2 4", "2\\n1\\n0 5\\n6\\n1 2 0 4", "2\\n1\\n0 10\\n4\\n-1 -1 1 8", "2\\n1\\n2 2\\n1\\n0 0 3 6", "2\\n1\\n-1 4\\n2\\n2 3 2 4", "2\\n1\\n0 20\\n12\\n0 2 0 4", "2\\n1\\n1 46\\n2\\n1 1 1 2", "2\\n1\\n1 23\\n2\\n2 1 1 2", "2\\n1\\n-2 5\\n3\\n2 2 2 4", "2\\n1\\n0 20\\n17\\n0 1 0 4", "2\\n1\\n0 1\\n4\\n0 -1 2 2", "2\\n1\\n-2 9\\n1\\n2 2 2 4", "2\\n1\\n1 24\\n2\\n3 2 0 2", "2\\n1\\n-2 11\\n3\\n2 2 4 4", "2\\n1\\n1 36\\n2\\n3 1 -1 2", "2\\n1\\n-1 1\\n7\\n0 -1 0 3", "2\\n1\\n-4 9\\n3\\n0 4 4 4", "2\\n1\\n-1 1\\n7\\n-1 -1 0 0", "2\\n1\\n-8 9\\n3\\n0 2 6 4", "2\\n1\\n-1 4\\n7\\n-1 -1 0 0", "2\\n1\\n-1 4\\n7\\n-1 -1 -1 4", "2\\n1\\n-1 4\\n7\\n-1 0 -1 -1", "2\\n1\\n0 17\\n2\\n1 2 1 2", "2\\n1\\n0 15\\n3\\n1 2 1 4", "2\\n1\\n1 2\\n4\\n-1 0 1 3", "2\\n1\\n0 10\\n1\\n1 1 1 1", "2\\n1\\n0 5\\n6\\n1 1 1 0", "2\\n1\\n0 3\\n1\\n2 1 1 1", "2\\n1\\n0 16\\n1\\n1 2 1 4", "2\\n1\\n4 11\\n7\\n0 0 1 2", "2\\n1\\n1 25\\n2\\n0 0 1 2", "2\\n1\\n0 14\\n7\\n1 2 1 4", "2\\n1\\n0 10\\n4\\n-1 1 2 5", "2\\n1\\n0 8\\n6\\n1 2 1 4", "2\\n1\\n1 8\\n5\\n0 0 0 4", "2\\n1\\n1 15\\n2\\n0 3 2 3", "2\\n1\\n-1 3\\n4\\n2 2 2 5", "2\\n1\\n0 10\\n4\\n-1 -1 1 15", "2\\n1\\n1 5\\n2\\n1 3 2 2", "2\\n1\\n0 34\\n17\\n0 2 0 4", "2\\n1\\n-1 10\\n1\\n0 0 1 2", "2\\n1\\n-1 9\\n2\\n0 2 1 4", "2\\n1\\n0 1\\n4\\n-1 -1 1 2", "2\\n1\\n0 1\\n4\\n0 -1 4 2"], "outputs": ["10\\n1 1", "10 \\n1 1 \\n", "15 \\n1 1 \\n", "15 \\n1 1 4\\n", "11 \\n1 1 4\\n", "11 \\n0 1 4\\n", "2 \\n0 1 4\\n", "15 \\n1 2 \\n", "20 \\n1 1 4\\n", "10 \\n1 1 4\\n", "11 \\n1 1 5\\n", "1 \\n1 1 4\\n", "2 \\n0 1 6\\n", "10 \\n1 1 1\\n", "3 \\n1 2 \\n", "20 \\n1 2 4\\n", "11 \\n1 1 1\\n", "3 \\n2 2 \\n", "8 \\n0 1 4\\n", "2 \\n0 2 6\\n", "10 \\n1 1 8\\n", "2 \\n0 3 6\\n", "10 \\n0 1 8\\n", "3 \\n0 1 4\\n", "4 \\n2 2 \\n", "10 \\n0 1 2\\n", "24 \\n1 2 \\n", "8 \\n2 2 \\n", "24 \\n1 1 \\n", "9 \\n2 2 \\n", "20 \\n1 3\\n", "1 \\n0 1 2\\n", "20 \\n0 3 4\\n", "9 \\n2 2\\n", "9 \\n2 4 4 \\n", "1 \\n0 0 2\\n", "1 \\n-1 0 2\\n", "2 \\n-1 0 2\\n", "2 \\n0 0 2\\n", "4 \\n-1 0 2\\n", "4 \\n-1 -1 2\\n", "4 \\n-1 0 1\\n", "17 \\n1 1 \\n", "15 \\n1 1 4 \\n", "11 \\n1 2 4\\n", "11 \\n1 \\n", "20 \\n1 2 \\n", "15 \\n2 2 \\n", "15 \\n1 \\n", "3 \\n1 1 \\n", "20 \\n1 \\n", "10 \\n1 2 4\\n", "11 \\n1 1\\n", "1 \\n0 1 6\\n", "25 \\n1 1 \\n", "4 \\n1 2 4\\n", "15 \\n1 3 \\n", "3 \\n2 2\\n", "5 \\n1 2 4\\n", "10 \\n-1 1 8\\n", "2 \\n0 \\n", "4 \\n2 3 \\n", "20 \\n0 2 4\\n", "46 \\n1 1 \\n", "23 \\n1 2 \\n", "5 \\n2 2\\n", "20 \\n0 1 4\\n", "1 \\n0 2\\n", "9 \\n2 \\n", "24 \\n2 2 \\n", "11 \\n2 4 4 \\n", "36 \\n1 2 \\n", "1 \\n0 0 3\\n", "9 \\n4 4 4 \\n", "1 \\n-1 0 0\\n", "9 \\n2 4\\n", "4 \\n-1 0 0\\n", "4 \\n-1 -1 4\\n", "4 \\n-1 -1 0\\n", "17 \\n1 2 \\n", "15 \\n1 2 4 \\n", "2 \\n0 1 3\\n", "10 \\n1 \\n", "5 \\n1 1 1\\n", "3 \\n1 \\n", "16 \\n1 \\n", "11 \\n0 1 2\\n", "25 \\n0 1 \\n", "14 \\n1 2 4\\n", "10 \\n1 2 5\\n", "8 \\n1 2 4\\n", "8 \\n0 0 4\\n", "15 \\n2 3 \\n", "3 \\n2 2 5\\n", "10 \\n-1 1 15\\n", "5 \\n2 2 \\n", "34 \\n0 2 4\\n", "10 \\n0 \\n", "9 \\n1 2 \\n", "1 \\n-1 1 2\\n", "1 \\n0 2 4\\n"]}',
+    "style": "rule"
+}
+
 
 class Role(Enum):
     """
@@ -344,6 +440,8 @@ class RayPPOTrainer:
 
         self._validate_config()
         self._create_dataloader(train_dataset, val_dataset, collate_fn, train_sampler)
+
+        self.vis_table_data = []
 
     def _validate_config(self):
         config = self.config
@@ -948,6 +1046,106 @@ class RayPPOTrainer:
                         timing_raw.update(gen_batch_output.meta_info["timing"])
                         gen_batch_output.meta_info.pop("timing", None)
 
+                    if self.config.trainer.self_play:
+                        solver_input_ids_lst = []
+                        solver_attention_mask_lst = []
+                        solver_position_ids_lst = []
+                        solver_extra_infos_lst = []
+                        solver_loss_mask_lst = []
+                        solver_ground_truth_lst = []
+                        for i in range(len(gen_batch_output)):
+                            response_ids = gen_batch_output.batch["responses"][i]
+                            response_str = self.tokenizer.decode(response_ids, skip_special_tokens=True)
+                            if self.config.trainer.proposer_parser_version == 'v1':
+                                proposed_question_str = response_str
+                                proposed_question_str = f"""Let's think step by step and enclose the reasoning process and answer within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think> <answer> RESULT_NUMBER </answer>. {proposed_question_str}"""
+                                loss_mask = torch.ones_like(gen_batch_output.batch["input_ids"][i])
+                                messages = [{"role": "user", "content": proposed_question_str}]
+                            elif self.config.trainer.proposer_parser_version == 'v2':
+                                if 'Selected Question' not in response_str:
+                                    proposed_question_str = response_str
+                                    loss_mask = torch.zeros_like(gen_batch_output.batch["input_ids"][i])
+                                else:
+                                    proposed_question_str = response_str.split('Selected Question')[-1]
+                                    loss_mask = torch.ones_like(gen_batch_output.batch["input_ids"][i])
+                                proposed_question_str = f"""Let's think step by step and enclose the reasoning process and answer within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think> <answer> RESULT_NUMBER </answer>. {proposed_question_str}"""
+                                messages = [{"role": "user", "content": proposed_question_str}]
+                            elif self.config.trainer.proposer_parser_version == 'v3':
+                                messages = extract_problem_description(response_str)
+                                proposed_question_str = messages[-1]['content']
+                                unit_tests = extract_unit_tests(response_str)
+                                if unit_tests == 'error':
+                                    ground_truth_dict = dummy_unit_tests
+                                    loss_mask = torch.zeros_like(gen_batch_output.batch["input_ids"][i])
+                                else:
+                                    ground_truth_dict = json.loads(unit_tests['ground_truth'])
+                                    loss_mask = torch.ones_like(gen_batch_output.batch["input_ids"][i])
+                            else:
+                                assert False, "Unsupported proposer_parser_version"
+                            
+                            proposed_question = self.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+                            proposed_question = self.tokenizer(proposed_question, return_tensors="pt", add_special_tokens=False)
+                            proposed_question_input_ids = proposed_question['input_ids']
+                            proposed_question_attention_mask = proposed_question['attention_mask']
+                            proposed_question_input_ids, proposed_question_attention_mask = verl_F.postprocess_data(
+                                input_ids=proposed_question_input_ids,
+                                attention_mask=proposed_question_attention_mask,
+                                max_length=self.config.data.max_prompt_length,
+                                pad_token_id=self.tokenizer.pad_token_id,
+                                left_pad=True,
+                                truncation=self.config.data.truncation,
+                            )
+                            proposed_question_position_ids = compute_position_id_with_mask(proposed_question_attention_mask)
+                            extra_info = {
+                                "split": 'train',
+                                "index": i,
+                                "question": proposed_question_str,
+                            }
+                            if self.config.trainer.proposer_parser_version == 'v3':
+                                extra_info = {
+                                    "split": 'dummy',
+                                    "index": 0,
+                                }
+                            solver_extra_infos_lst.append(extra_info)
+                            solver_input_ids_lst.append(proposed_question_input_ids)
+                            solver_attention_mask_lst.append(proposed_question_attention_mask)
+                            solver_position_ids_lst.append(proposed_question_position_ids)
+                            solver_loss_mask_lst.append(loss_mask)
+                            if self.config.trainer.proposer_parser_version == 'v3':
+                                solver_ground_truth_lst.append(ground_truth_dict)
+                        
+                        solver_input_ids = torch.cat(solver_input_ids_lst, dim=0)
+                        solver_attention_mask = torch.cat(solver_attention_mask_lst, dim=0)
+                        solver_position_ids = torch.cat(solver_position_ids_lst, dim=0)
+                        solver_extra_infos = np.array(solver_extra_infos_lst, dtype=object)
+                        solver_loss_mask = torch.stack(solver_loss_mask_lst, dim=0)
+                        solver_batch: DataProto = DataProto.from_single_dict({
+                            "input_ids": solver_input_ids,
+                            "attention_mask": solver_attention_mask,
+                            "position_ids": solver_position_ids,
+                            "extra_info": solver_extra_infos,
+                            "loss_mask": solver_loss_mask,
+                        })
+                        solver_gen_batch = solver_batch.pop(
+                            batch_keys=batch_keys_to_pop,
+                        )
+                        solver_gen_batch_output = self.actor_rollout_wg.generate_sequences(solver_gen_batch)
+                        solver_batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(solver_batch.batch))], dtype=object)
+                        solver_batch.non_tensor_batch["reward_model"] = np.array([None] * len(solver_batch.batch), dtype=object)
+                        solver_batch.non_tensor_batch["data_source"] = np.array([batch.non_tensor_batch["data_source"][0]] * len(solver_batch.batch), dtype=object)
+                        if self.config.trainer.proposer_parser_version == 'v3':
+                            solver_batch.non_tensor_batch["data_source"] = np.array(["codecontests"] * len(solver_batch.batch), dtype=object) # TODO change this to custom code source
+                            solver_batch.non_tensor_batch["reward_model"] = np.array(
+                                [{"ground_truth": gt, "style": "rule"} for gt in solver_ground_truth_lst],
+                                dtype=object
+                            )
+
+                        solver_batch = solver_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
+                        solver_batch = solver_batch.union(solver_gen_batch_output)
+                        solver_batch.batch["response_mask"] = compute_response_mask(solver_batch)
+                        solver_batch.meta_info["global_token_num"] = torch.sum(solver_batch.batch["attention_mask"], dim=-1).tolist()
+                        solver_batch.meta_info["temperature"] = self.config.actor_rollout_ref.rollout.temperature
+
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
                         with _timer("gen_max", timing_raw):
                             gen_baseline_batch = deepcopy(gen_batch)
@@ -982,15 +1180,59 @@ class RayPPOTrainer:
                     batch.meta_info["global_token_num"] = torch.sum(batch.batch["attention_mask"], dim=-1).tolist()
 
                     with _timer("reward", timing_raw):
-                        # compute reward model score
-                        if self.use_rm:
-                            reward_tensor = self.rm_wg.compute_rm_score(batch)
-                            batch = batch.union(reward_tensor)
+                        if self.config.trainer.self_play:
+                            reward_tensor = torch.zeros_like(batch.batch["responses"], dtype=torch.float32)
+                            reward_extra_infos_dict = {}
+                            if self.config.trainer.self_play_solver_reward == 'ttrl':
+                                solver_reward_tensor, solver_reward_extra_infos_dict = compute_reward(solver_batch, self.reward_fn)
+                                loss_mask_lst = []
+                                for i in range(len(batch)):
+                                    response_ids = batch.batch["responses"][i]
+                                    prompt_length = batch.batch['prompts'].shape[-1]
+                                    valid_response_length = batch.batch["attention_mask"][i, prompt_length:].sum()
 
-                        if self.config.reward_model.launch_reward_fn_async:
-                            future_reward = compute_reward_async.remote(batch, self.config, self.tokenizer)
+                                    num_majority = solver_reward_tensor[i * self.config.actor_rollout_ref.rollout.n: (i + 1) * self.config.actor_rollout_ref.rollout.n].sum()
+                                    if num_majority != self.config.actor_rollout_ref.rollout.n and num_majority > 1:
+                                        reward_tensor[i, valid_response_length - 1] = 1
+                                    solver_loss_mask = solver_batch.batch['loss_mask'][i * self.config.actor_rollout_ref.rollout.n] # assume it would be the same for i * n to (i + 1) * n
+                                    if solver_loss_mask.sum() > 0:  
+                                        loss_mask = torch.ones_like(batch.batch['input_ids'][i], dtype=torch.float32)
+                                    else:
+                                        loss_mask = torch.zeros_like(batch.batch['input_ids'][i], dtype=torch.float32)
+                                    loss_mask_lst.append(loss_mask)
+                                proposer_loss_mask = torch.stack(loss_mask_lst)
+                                batch.batch['loss_mask'] = proposer_loss_mask
+                            elif self.config.trainer.self_play_solver_reward == 'prime':
+                                solver_reward_tensor, solver_reward_extra_infos_dict = compute_reward(solver_batch, self.reward_fn)
+                                loss_mask_lst = []
+                                for i in range(len(batch)):
+                                    response_ids = batch.batch["responses"][i]
+                                    prompt_length = batch.batch['prompts'].shape[-1]
+                                    valid_response_length = batch.batch["attention_mask"][i, prompt_length:].sum()
+
+                                    avg_score = solver_reward_tensor[i * self.config.actor_rollout_ref.rollout.n: (i + 1) * self.config.actor_rollout_ref.rollout.n].sum()/self.config.actor_rollout_ref.rollout.n
+                                    if avg_score < 1 and avg_score > 0:
+                                        reward_tensor[i, valid_response_length - 1] = 1
+                                    solver_loss_mask = solver_batch.batch['loss_mask'][i * self.config.actor_rollout_ref.rollout.n] # assume it would be the same for i * n to (i + 1) * n
+                                    if solver_loss_mask.sum() > 0:  
+                                        loss_mask = torch.ones_like(batch.batch['input_ids'][i], dtype=torch.float32)
+                                    else:
+                                        loss_mask = torch.zeros_like(batch.batch['input_ids'][i], dtype=torch.float32)
+                                    loss_mask_lst.append(loss_mask)
+                                proposer_loss_mask = torch.stack(loss_mask_lst)
+                                batch.batch['loss_mask'] = proposer_loss_mask
+                            else:
+                                assert False, "Unsupported self_play_solver_reward"
                         else:
-                            reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
+                            # compute reward model score
+                            if self.use_rm:
+                                reward_tensor = self.rm_wg.compute_rm_score(batch)
+                                batch = batch.union(reward_tensor)
+
+                            if self.config.reward_model.launch_reward_fn_async:
+                                future_reward = compute_reward_async.remote(batch, self.config, self.tokenizer)
+                            else:
+                                reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
 
                     # recompute old_log_probs
                     with _timer("old_log_prob", timing_raw):
@@ -1027,6 +1269,16 @@ class RayPPOTrainer:
                                     "training/rollout_probs_diff_std": rollout_probs_diff_std.detach().item(),
                                 }
                             )
+                        if self.config.trainer.self_play:
+                            old_log_prob = self.actor_rollout_wg.compute_log_prob(solver_batch)
+                            entropys = old_log_prob.batch["entropys"]
+                            response_masks = solver_batch.batch["response_mask"]
+                            loss_agg_mode = self.config.actor_rollout_ref.actor.loss_agg_mode
+                            entropy_agg = agg_loss(loss_mat=entropys, loss_mask=response_masks, loss_agg_mode=loss_agg_mode)
+                            old_log_prob_metrics = {"actor/entropy": entropy_agg.detach().item()}
+                            metrics.update(old_log_prob_metrics)
+                            old_log_prob.batch.pop("entropys")
+                            solver_batch = solver_batch.union(old_log_prob)
 
                     if self.use_reference_policy:
                         # compute reference log_prob
@@ -1037,11 +1289,22 @@ class RayPPOTrainer:
                                 ref_log_prob = self.actor_rollout_wg.compute_ref_log_prob(batch)
                             batch = batch.union(ref_log_prob)
 
+                            if self.config.trainer.self_play:
+                                if not self.ref_in_actor:
+                                    ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(solver_batch)
+                                else:
+                                    ref_log_prob = self.actor_rollout_wg.compute_ref_log_prob(solver_batch)
+                                solver_batch = solver_batch.union(ref_log_prob)
+
                     # compute values
                     if self.use_critic:
                         with _timer("values", timing_raw):
                             values = self.critic_wg.compute_values(batch)
                             batch = batch.union(values)
+
+                            if self.config.trainer.self_play:
+                                values = self.critic_wg.compute_values(solver_batch)
+                                solver_batch = solver_batch.union(values)
 
                     with _timer("adv", timing_raw):
                         # we combine with rule-based rm
@@ -1075,6 +1338,24 @@ class RayPPOTrainer:
                             config=self.config.algorithm,
                         )
 
+                        if self.config.trainer.self_play:
+                            solver_batch.batch["token_level_scores"] = solver_reward_tensor
+                            solver_batch.batch["token_level_rewards"] = solver_batch.batch["token_level_scores"]
+
+                            # compute advantages, executed on the driver process
+                            norm_adv_by_std_in_grpo = self.config.algorithm.get("norm_adv_by_std_in_grpo", True)  # GRPO adv normalization factor
+
+                            solver_batch = compute_advantage(
+                                solver_batch,
+                                adv_estimator=self.config.algorithm.adv_estimator,
+                                gamma=self.config.algorithm.gamma,
+                                lam=self.config.algorithm.lam,
+                                num_repeat=self.config.actor_rollout_ref.rollout.n,
+                                norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+                                # multi_turn=self.config.actor_rollout_ref.rollout.multi_turn.enable,
+                                config=self.config.algorithm,
+                            )
+
                     # update critic
                     if self.use_critic:
                         with _timer("update_critic", timing_raw):
@@ -1082,14 +1363,36 @@ class RayPPOTrainer:
                         critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
                         metrics.update(critic_output_metrics)
 
+                        if self.config.trainer.self_play:
+                            critic_output = self.critic_wg.update_critic(solver_batch)
+                            critic_output_metrics = reduce_metrics(critic_output.meta_info["metrics"])
+                            solver_critic_output_metrics = {}
+                            for k,v in critic_output_metrics.items():
+                                solver_k = "solver_" + k
+                                solver_critic_output_metrics[solver_k] = v
+                            metrics.update(solver_critic_output_metrics)
+
                     # implement critic warmup
                     if self.config.trainer.critic_warmup <= self.global_steps:
-                        # update actor
-                        with _timer("update_actor", timing_raw):
-                            batch.meta_info["multi_turn"] = self.config.actor_rollout_ref.rollout.multi_turn.enable
-                            actor_output = self.actor_rollout_wg.update_actor(batch)
-                        actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
-                        metrics.update(actor_output_metrics)
+                        if self.config.trainer.self_play:
+                            # update actor
+                            with _timer("update_actor", timing_raw):
+                                solver_batch.meta_info["multi_turn"] = self.config.actor_rollout_ref.rollout.multi_turn.enable
+                                actor_output = self.actor_rollout_wg.update_actor(solver_batch)
+                            actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
+                            solver_actor_output_metrics = {}
+                            for k,v in actor_output_metrics.items():
+                                solver_k = "solver_" + k
+                                solver_actor_output_metrics[solver_k] = v
+                            metrics.update(solver_actor_output_metrics)
+
+                        if (not self.config.trainer.self_play) or self.global_steps % self.config.trainer.self_play_proposer_update_freq == 0:
+                            # update actor
+                            with _timer("update_actor", timing_raw):
+                                batch.meta_info["multi_turn"] = self.config.actor_rollout_ref.rollout.multi_turn.enable
+                                actor_output = self.actor_rollout_wg.update_actor(batch)
+                            actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
+                            metrics.update(actor_output_metrics)
 
                     # Log rollout generations if enabled
                     rollout_data_dir = self.config.trainer.get("rollout_data_dir", None)
@@ -1127,11 +1430,52 @@ class RayPPOTrainer:
                     }
                 )
                 # collect metrics
+                if self.config.trainer.self_play:
+                    metrics.update(compute_data_metrics(batch=solver_batch, use_critic=self.use_critic, is_solver_batch=True))
                 metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                 metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
                 # TODO: implement actual tflpo and theoretical tflpo
                 n_gpus = self.resource_pool_manager.get_n_gpus()
                 metrics.update(compute_throughout_metrics(batch=batch, timing_raw=timing_raw, n_gpus=n_gpus))
+
+                if self.config.trainer.vis_wandb_table and self.global_steps % self.config.trainer.vis_freq == 0:
+                    vis_batches = self.config.trainer.vis_batches
+                    prompts_text = self.tokenizer.batch_decode(batch.batch['prompts'][:vis_batches], skip_special_tokens=True)
+                    responses_text = self.tokenizer.batch_decode(batch.batch['responses'][:vis_batches], skip_special_tokens=True)                
+                    
+                    for i in range(len(prompts_text)):
+                        table_data = {
+                            "global_step": self.global_steps,
+                            "prompt": prompts_text[i],
+                            "response": responses_text[i],
+                            'ground_truth': 'NaN',
+                            'reward': batch.batch["token_level_scores"][i].sum(-1).item(),  
+                        }
+                        
+                        self.vis_table_data.append(table_data)
+
+                    if self.config.trainer.self_play:
+                        solver_prompts_text = self.tokenizer.batch_decode(solver_batch.batch['prompts'][:vis_batches], skip_special_tokens=True)
+                        solver_responses_text = self.tokenizer.batch_decode(solver_batch.batch['responses'][:vis_batches], skip_special_tokens=True)                
+                        
+                        for i in range(len(solver_prompts_text)):
+                            table_data = {
+                                "global_step": self.global_steps,
+                                "prompt": solver_prompts_text[i],
+                                "response": solver_responses_text[i],
+                                'ground_truth': 'NaN',
+                                "reward": solver_batch.batch["token_level_scores"][i].sum(-1).item(),  
+                            }
+                            
+                            self.vis_table_data.append(table_data)
+
+                        
+                    text_table = wandb.Table(columns=list(self.vis_table_data[0].keys()))
+                    for row in self.vis_table_data:
+                        text_table.add_data(
+                            *[row[key] if not isinstance(row[key], dict) else str(row[key]) for key in row.keys()]
+                        )
+                    metrics.update({"vis_table": text_table})
 
                 # TODO: make a canonical logger that supports various backend
                 logger.log(data=metrics, step=self.global_steps)

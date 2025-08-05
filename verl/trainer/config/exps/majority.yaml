@@ -1,0 +1,8 @@
+# @package _global_
+
+reward_model:
+  reward_manager: majority
+
+trainer:
+  self_play_solver_reward: ttrl
+  base_format: False

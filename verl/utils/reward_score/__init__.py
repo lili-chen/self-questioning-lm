@@ -16,7 +16,7 @@
 from verl.utils.import_utils import deprecated
 
 
-def default_compute_score(data_source, solution_str, ground_truth, extra_info=None, sandbox_fusion_url=None, concurrent_semaphore=None):
+def default_compute_score(data_source, solution_str, ground_truth, extra_info=None, sandbox_fusion_url=None, concurrent_semaphore=None, memory_limit_mb=None):
     """Compute the score for a given solution based on the data source.
 
     Args:
@@ -36,7 +36,7 @@ def default_compute_score(data_source, solution_str, ground_truth, extra_info=No
         from . import gsm8k
 
         res = gsm8k.compute_score(solution_str, ground_truth)
-    elif data_source in ["lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval"]:
+    elif data_source in ["lighteval/MATH", "DigitalLearningGmbH/MATH-lighteval", "HuggingFaceH4/MATH-500"]:
         from . import math
 
         res = math.compute_score(solution_str, ground_truth)
@@ -83,6 +83,10 @@ def default_compute_score(data_source, solution_str, ground_truth, extra_info=No
         from . import search_r1_like_qa_em
 
         res = search_r1_like_qa_em.compute_score(solution_str, ground_truth)
+    elif data_source in ["yolo/multiply-3_digit"]:
+        from . import multiply
+
+        res = multiply.compute_score(solution_str, ground_truth)
     else:
         raise NotImplementedError(f"Reward function is not implemented for {data_source=}")
 

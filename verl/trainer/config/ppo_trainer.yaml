@@ -4,6 +4,10 @@
 # 3. Inline comments (after a field on the same line) are not allowed.
 # 4. Indentation level is respected for nested fields.
 
+defaults:
+   - _self_
+   - /exps: []
+
 # dataset config
 data:
 
@@ -757,7 +761,7 @@ trainer:
   project_name: verl_examples
 
   # Experiment name for run identification in tracking tools
-  experiment_name: gsm8k
+  experiment_name: debug
 
   # Logging backends to use: "console", "wandb", etc.
   logger: [ 'console', 'wandb' ]
@@ -818,6 +822,27 @@ trainer:
 
   # Device to run training on (e.g., "cuda", "cpu")
   device: cuda
+
+  # Whether to enable self-play
+  self_play: True
+
+  # Whether to visualize table data
+  vis_wandb_table: False
+
+  # Number of batches to visualize
+  vis_batches: 4
+
+  # Frequency of visualizing table data
+  vis_freq: 10
+
+  # Whether to use self-play solver reward
+  self_play_solver_reward: ttrl
+
+  # Proposer update frequency
+  self_play_proposer_update_freq: 5
+
+  # Proposer parser version
+  proposer_parser_version: v1
 
 # configs related to ray initialization
 ray_init:

@@ -1,0 +1,21 @@
+# @package _global_
+
+# dataset config
+data:
+  train_files: selfplay_data/selfplay_prompts_linear_equations_v1/train.parquet
+  val_files: selfplay_data/linear_equations/test.parquet
+
+  max_prompt_length: 512
+  max_response_length: 3072
+  truncation: left
+
+trainer:
+  balance_batch: false
+  self_play: true
+  proposer_parser_version: v2
+
+actor_rollout_ref:
+  rollout:
+    n: 4
+  model:
+    path: Qwen/Qwen2.5-3B-Instruct
