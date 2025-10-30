@@ -1,0 +1,80 @@
+# V-SQLM configuration for math tasks (GSM8K, MATH)
+
+experiment:
+  name: math_vsqlm
+  domain: math
+  seed: 42
+
+# Dataset configuration
+dataset:
+  name: gsm8k
+  split: test
+  max_samples: null  # null = all samples
+
+# Solver backend configuration
+solver:
+  backend_type: dummy  # 'dummy', 'transformers', 'openai'
+  # For transformers:
+  # model_name: "Qwen/Qwen2.5-Math-7B-Instruct"
+  # device: "cuda"
+  # For OpenAI:
+  # model_name: "gpt-4"
+  # api_key: null  # reads from OPENAI_API_KEY env var
+
+# Sampling configuration
+sampling:
+  K_min: 3
+  K_max: 15
+  temperatures: [0.6, 0.7, 0.8]  # cycle through temperatures
+  variants: ["cot", "concise"]  # cycle through variants
+  top_p: 0.95
+
+# Stopping configuration
+stopping:
+  z: 1.96  # Wilson confidence (1.96 ≈ 95% one-sided)
+  threshold: 0.5  # majority threshold
+
+# Verification configuration
+verifier:
+  enabled: true
+  type: math  # 'math', 'code', 'text', 'dummy'
+  tolerance: 1e-6
+
+# Voting configuration
+voting:
+  weighted: false  # enable calibration-weighted voting
+  calibration:
+    alpha_prior: 1.0
+    beta_prior: 1.0
+
+# Debate configuration
+debate:
+  enabled: false
+  tau: 0.4  # entropy threshold for triggering debate
+  rounds: 2
+  tit_for_tat_level: 2
+  early_stop: true
+  debater_A:
+    backend_type: dummy
+  debater_B:
+    backend_type: dummy
+  judge:
+    backend_type: dummy
+
+# Curriculum configuration (for proposer training)
+curriculum:
+  enabled: false
+  alpha: 1.0  # difficulty weight
+  beta: 0.5  # entropy weight
+  gamma: -2.0  # incorrectness penalty
+  delta: -5.0  # ill-posed penalty
+
+# Logging configuration
+logging:
+  output_dir: runs/${experiment.name}
+  log_level: INFO
+  save_transcripts: true  # save debate transcripts
+  wandb:
+    enabled: false
+    project: vsqlm
+    entity: null

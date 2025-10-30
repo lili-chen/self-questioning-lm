@@ -1,0 +1,79 @@
+# V-SQLM configuration for code tasks (MBPP, HumanEval)
+
+experiment:
+  name: code_vsqlm
+  domain: code
+  seed: 42
+
+# Dataset configuration
+dataset:
+  name: mbpp
+  split: test
+  max_samples: null
+
+# Solver backend
+solver:
+  backend_type: dummy
+  # model_name: "Qwen/Qwen2.5-Coder-7B-Instruct"
+
+# Sampling configuration
+sampling:
+  K_min: 3
+  K_max: 10
+  temperatures: [0.6, 0.8]
+  variants: ["cot"]
+  top_p: 0.95
+
+# Stopping configuration
+stopping:
+  z: 1.96
+  threshold: 0.5
+
+# Verification configuration (code execution)
+verifier:
+  enabled: true
+  type: code
+  timeout: 5.0
+  sandbox: true  # use subprocess sandbox
+  docker: false  # set true to use Docker (requires Docker installed)
+  docker_image: "python:3.10-slim"
+  memory_limit: "256m"
+
+# Voting configuration
+voting:
+  weighted: false
+  calibration:
+    alpha_prior: 1.0
+    beta_prior: 1.0
+
+# Debate configuration
+debate:
+  enabled: false
+  tau: 0.45
+  rounds: 2
+  tit_for_tat_level: 2
+  early_stop: true
+  debater_A:
+    backend_type: dummy
+  debater_B:
+    backend_type: dummy
+  judge:
+    backend_type: dummy
+
+# Curriculum configuration
+curriculum:
+  enabled: false
+  alpha: 1.0
+  beta: 0.5
+  gamma: -2.0
+  delta: -5.0
+
+# Logging configuration
+logging:
+  output_dir: runs/${experiment.name}
+  log_level: INFO
+  save_transcripts: true
+  wandb:
+    enabled: false
+    project: vsqlm
+    entity: null

@@ -1,0 +1,117 @@
+# Ablation study configurations
+
+# Base configuration
+base:
+  experiment:
+    name: baseline
+    domain: math
+    seed: 42
+  dataset:
+    name: gsm8k
+    split: test
+    max_samples: 100
+  solver:
+    backend_type: dummy
+  sampling:
+    K_min: 5
+    K_max: 5
+    temperatures: [0.7]
+    variants: ["cot"]
+  stopping:
+    z: 1.96
+    threshold: 0.5
+  verifier:
+    enabled: false
+    type: dummy
+  voting:
+    weighted: false
+  debate:
+    enabled: false
+  curriculum:
+    enabled: false
+
+# Ablation: single-shot (K=1)
+single_shot:
+  experiment:
+    name: single_shot
+  sampling:
+    K_min: 1
+    K_max: 1
+
+# Ablation: fixed-K=3
+fixed_k3:
+  experiment:
+    name: fixed_k3
+  sampling:
+    K_min: 3
+    K_max: 3
+
+# Ablation: fixed-K=10
+fixed_k10:
+  experiment:
+    name: fixed_k10
+  sampling:
+    K_min: 10
+    K_max: 10
+
+# Ablation: V-SQLM without verify-first
+vsqlm_no_verify:
+  experiment:
+    name: vsqlm_no_verify
+  sampling:
+    K_min: 3
+    K_max: 15
+  verifier:
+    enabled: false
+
+# Ablation: V-SQLM with verify-first
+vsqlm_verify:
+  experiment:
+    name: vsqlm_verify
+  sampling:
+    K_min: 3
+    K_max: 15
+  verifier:
+    enabled: true
+    type: math
+
+# Ablation: V-SQLM + debate (always)
+vsqlm_debate_always:
+  experiment:
+    name: vsqlm_debate_always
+  sampling:
+    K_min: 3
+    K_max: 15
+  verifier:
+    enabled: true
+    type: math
+  debate:
+    enabled: true
+    tau: 0.0  # always trigger
+
+# Ablation: V-SQLM + debate (gated)
+vsqlm_debate_gated:
+  experiment:
+    name: vsqlm_debate_gated
+  sampling:
+    K_min: 3
+    K_max: 15
+  verifier:
+    enabled: true
+    type: math
+  debate:
+    enabled: true
+    tau: 0.4  # trigger on high entropy
+
+# Ablation: weighted voting
+vsqlm_weighted:
+  experiment:
+    name: vsqlm_weighted
+  sampling:
+    K_min: 3
+    K_max: 15
+  verifier:
+    enabled: true
+    type: math
+  voting:
+    weighted: true

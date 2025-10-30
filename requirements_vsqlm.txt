@@ -1,0 +1,24 @@
+# V-SQLM Requirements
+# Install with: pip install -r requirements_vsqlm.txt
+
+# Core dependencies
+numpy>=1.24.0
+scipy>=1.10.0
+pyyaml>=6.0
+
+# Optional: LLM backends
+transformers>=4.30.0  # For HuggingFace models
+torch>=2.0.0  # For transformers
+openai>=1.0.0  # For OpenAI API
+
+# Optional: Advanced features
+# sympy>=1.12  # For symbolic math in canonicalization
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: Logging and visualization
+# wandb>=0.15.0  # For Weights & Biases integration
+# matplotlib>=3.7.0  # For plotting budget curves
+# pandas>=2.0.0  # For data analysis
